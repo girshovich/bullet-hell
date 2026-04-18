@@ -11,7 +11,7 @@ import { pickThreeUpgrades, UpgradeOption } from './upgrades';
 import { SaveManager, SaveData, PERK_DEFS, LeaderboardEntry } from './save';
 import { FIXED_STEP, EMOJI, JOYSTICK_VISUAL_RADIUS } from './constants';
 
-type GameState = 'playing' | 'levelup' | 'dead';
+type GameState = 'playing' | 'paused' | 'levelup' | 'dead';
 
 interface CardRect { x: number; y: number; w: number; h: number; }
 
@@ -71,6 +71,21 @@ export class Game {
     });
 
     this.canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const lx = e.clientX - rect.left;
+      const ly = e.clientY - rect.top;
+      const pb = this.pauseBtn();
+      const onPause = lx >= pb.x && lx <= pb.x + pb.w && ly >= pb.y && ly <= pb.y + pb.h;
+
+      if (onPause && (this.gameState === 'playing' || this.gameState === 'paused')) {
+        this.gameState = this.gameState === 'playing' ? 'paused' : 'playing';
+        this.input.reset();
+        return;
+      }
+      if (this.gameState === 'paused') {
+        this.gameState = 'playing';
+        return;
+      }
       if (this.gameState === 'dead') {
         this.handleShopTap(e.clientX, e.clientY);
       } else if (this.gameState === 'levelup') {
@@ -142,6 +157,7 @@ export class Game {
 
     while (this.accumulator >= FIXED_STEP) {
       if (this.gameState === 'playing') this.update(FIXED_STEP);
+      // 'paused', 'levelup', 'dead' all skip update
       this.accumulator -= FIXED_STEP;
     }
 
@@ -317,6 +333,10 @@ export class Game {
     this.gameState = 'levelup';
   }
 
+  private pauseBtn(): CardRect {
+    return { x: this.logicalW - 52, y: this.logicalH - 52, w: 44, h: 44 };
+  }
+
   private computeLevelUpCards(): CardRect[] {
     const cardW = 165, cardH = 165, gap = 22;
     const totalW = 3 * cardW + 2 * gap;
@@ -446,6 +466,40 @@ export class Game {
 
     if (this.gameState === 'dead')    this.drawShopOverlay();
     if (this.gameState === 'levelup') this.drawLevelUpOverlay();
+    if (this.gameState === 'paused')  this.drawPauseOverlay();
+    if (this.gameState === 'playing' || this.gameState === 'paused') this.drawPauseButton();
+  }
+
+  private drawPauseButton(): void {
+    const { ctx } = this;
+    const pb = this.pauseBtn();
+    const cx = pb.x + pb.w / 2;
+    const cy = pb.y + pb.h / 2;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, pb.w / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(this.gameState === 'paused' ? '▶' : '⏸', cx, cy);
+    ctx.restore();
+  }
+
+  private drawPauseOverlay(): void {
+    const { ctx, logicalW: w, logicalH: h } = this;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 42px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('⏸  PAUSED', w / 2, h / 2 - 20);
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('Tap anywhere to resume', w / 2, h / 2 + 28);
   }
 
   private drawLevelUpOverlay(): void {
